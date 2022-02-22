@@ -21,7 +21,7 @@ type paramsVerificationCode struct {
 	Email       string `json:"email"`
 	PhoneNumber string `json:"phoneNumber"`
 	OperationID string `json:"operationID" binding:"required"`
-	UsedFor     int `json:"usedFor" binding:"required"`
+	UsedFor     int `json:"usedFor"`
 }
 
 func SendVerificationCode(c *gin.Context) {
@@ -38,18 +38,21 @@ func SendVerificationCode(c *gin.Context) {
 		account = params.PhoneNumber
 	}
 	var accountKey string
+	if params.UsedFor == 0 {
+		params.UsedFor = constant.VerificationCodeForRegister
+	}
 	switch params.UsedFor {
 	case constant.VerificationCodeForRegister:
 		_, err := im_mysql_model.GetRegister(account)
 		if err == nil {
 			log.NewError(params.OperationID, "The phone number has been registered", params)
-			c.JSON(http.StatusOK, gin.H{"errCode": constant.HasRegistered, "errMsg": ""})
+			c.JSON(http.StatusOK, gin.H{"errCode": constant.HasRegistered, "errMsg": "The phone number has been registered"})
 			return
 		}
 		ok, err := db.DB.JudgeAccountEXISTS(account)
 		if ok || err != nil {
 			log.NewError(params.OperationID, "The phone number has been registered", params)
-			c.JSON(http.StatusOK, gin.H{"errCode": constant.RepeatSendCode, "errMsg": ""})
+			c.JSON(http.StatusOK, gin.H{"errCode": constant.RepeatSendCode, "errMsg": "The phone number has been registered"})
 			return
 		}
 		accountKey = account + "_" + constant.VerificationCodeForRegisterSuffix
@@ -57,9 +60,9 @@ func SendVerificationCode(c *gin.Context) {
 	case constant.VerificationCodeForReset:
 		accountKey = account + "_" + constant.VerificationCodeForResetSuffix
 	}
-	log.NewInfo(params.OperationID, params.UsedFor,"begin store redis", accountKey)
 	rand.Seed(time.Now().UnixNano())
 	code := 100000 + rand.Intn(900000)
+	log.NewInfo(params.OperationID, params.UsedFor,"begin store redis", accountKey, code)
 	err := db.DB.SetAccountCode(accountKey, code, config.Config.Demo.CodeTTL)
 	if err != nil {
 		log.NewError(params.OperationID, "set redis error", accountKey, "err", err.Error())
